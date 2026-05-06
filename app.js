@@ -157,6 +157,7 @@ function getDayData(dateStr) {
 /* ============================================================
    RENDER
    ============================================================ */
+   
 function render() {
   const today = todayStr();
   const dayData = getDayData(today);
