@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CalTrack — Mon Suivi Calorique</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- SYNC STATUS BAR -->
+  <div class="sync-bar" id="sync-bar">
+    <span class="sync-dot" id="sync-dot"></span>
+    <span id="sync-label">Connexion…</span>
+  </div>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">CalTrack</span>
+      </div>
+      <span id="current-date-header" class="header-date"></span>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- HISTORIQUE BANDE -->
+    <section>
+      <div class="section-label">Historique · 30 derniers jours</div>
+      <div class="history-strip" id="history-strip">
+        <p class="loading-text">Chargement…</p>
+      </div>
+    </section>
+
+    <!-- CARTE AUJOURD'HUI -->
+    <section class="today-card">
+      <div class="today-top">
+        <div>
+          <h1 class="today-title">Aujourd'hui</h1>
+          <p id="today-date-label" class="today-date"></p>
+        </div>
+        <div class="badge-status" id="badge-status">—</div>
+      </div>
+
+      <!-- BATTERIE -->
+      <div class="battery-block">
+        <div class="battery-labels">
+          <span id="battery-consumed" class="battery-lbl-left">0 kcal ingurgitées</span>
+          <span id="battery-spent"    class="battery-lbl-right">/ 1 800 kcal dépensées</span>
+        </div>
+        <div class="battery-row">
+          <div class="battery-shell">
+            <div class="battery-fill" id="battery-fill"></div>
+            <span class="battery-pct" id="battery-pct">0%</span>
+          </div>
+          <div class="battery-nub"></div>
+        </div>
+      </div>
+
+      <!-- STATS -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <span class="stat-icon">🔥</span>
+          <span class="stat-label">Base</span>
+          <span class="stat-value" id="stat-bmr">1 800 kcal</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">🏃</span>
+          <span class="stat-label">Actives</span>
+          <span class="stat-value" id="stat-active">0 kcal</span>
+        </div>
+        <div class="stat-card stat-accent">
+          <span class="stat-icon">⚖️</span>
+          <span class="stat-label">Solde</span>
+          <span class="stat-value" id="stat-balance">0 kcal</span>
+        </div>
+      </div>
+
+      <!-- ACTIONS -->
+      <div class="actions-row">
+        <button class="btn btn-primary" onclick="openMealModal()">＋ Ajouter un repas</button>
+        <button class="btn btn-secondary" onclick="openActivityModal()">🏋️ Activité</button>
+      </div>
+
+      <!-- REPAS DU JOUR -->
+      <div class="meals-list" id="today-meals-list">
+        <p class="empty-state" id="empty-meals">Aucun repas enregistré pour aujourd'hui.</p>
+      </div>
+    </section>
+
+    <!-- DÉTAIL JOUR HISTORIQUE -->
+    <section class="history-detail-card" id="history-detail-section" style="display:none;">
+      <div class="history-detail-header">
+        <h2 id="history-detail-title" data-date=""></h2>
+        <button class="btn-close" onclick="closeHistoryDetail()">✕</button>
+      </div>
+      <div id="history-detail-content"></div>
+    </section>
+
+  </main>
+
+  <!-- MODAL REPAS -->
+  <div class="modal-overlay" id="meal-modal" onclick="closeMealModal(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Nouveau repas</h2>
+        <button class="btn-close" onclick="closeMealModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Type de repas <span class="req">*</span></label>
+          <select class="form-select" id="meal-type">
+            <option value="">— Choisir —</option>
+            <option value="Petit déjeuner">🌅 Petit déjeuner</option>
+            <option value="Déjeuner">☀️ Déjeuner</option>
+            <option value="Goûter">🍎 Goûter</option>
+            <option value="Dîner">🌙 Dîner</option>
+            <option value="Grignotage">🍿 Grignotage</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Calories <span class="req">*</span></label>
+          <div class="input-wrap">
+            <input type="number" class="form-input" id="meal-calories" placeholder="ex : 650" min="0" />
+            <span class="input-unit">kcal</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Composition <span class="opt">(optionnel)</span></label>
+          <textarea class="form-textarea" id="meal-composition" placeholder="ex : Riz, poulet, légumes…"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date <span class="opt">(modifier si besoin)</span></label>
+          <input type="date" class="form-input" id="meal-date" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeMealModal()">Annuler</button>
+        <button class="btn btn-primary" onclick="saveMeal()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ACTIVITÉ -->
+  <div class="modal-overlay" id="activity-modal" onclick="closeActivityModal(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Activité physique</h2>
+        <button class="btn-close" onclick="closeActivityModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-hint">Entre les calories actives indiquées par ta Suunto Run 2025.</p>
+        <div class="form-group">
+          <label class="form-label">Calories actives <span class="req">*</span></label>
+          <div class="input-wrap">
+            <input type="number" class="form-input" id="activity-calories" placeholder="ex : 420" min="0" />
+            <span class="input-unit">kcal</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date <span class="opt">(modifier si besoin)</span></label>
+          <input type="date" class="form-input" id="activity-date" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeActivityModal()">Annuler</button>
+        <button class="btn btn-primary" onclick="saveActivity()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
