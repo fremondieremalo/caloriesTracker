@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CalTrack — Mon Suivi Calorique</title>
+  <title>Calories Tracker</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -18,10 +18,14 @@
   <header class="header">
     <div class="header-inner">
       <div class="logo">
-        <span class="logo-icon">⚡</span>
-        <span class="logo-text">CalTrack</span>
+        <span class="logo-text">Calories Tracker</span>
       </div>
-      <span id="current-date-header" class="header-date"></span>
+      <div class="header-right">
+        <span id="current-date-header" class="header-date"></span>
+        <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Mode jour/nuit">
+          <span id="theme-icon">☀️</span>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -60,29 +64,29 @@
         </div>
       </div>
 
-      <!-- STATS -->
+      <!-- KPI STATS -->
       <div class="stats-row">
         <div class="stat-card">
-          <span class="stat-icon">🔥</span>
-          <span class="stat-label">Base</span>
-          <span class="stat-value" id="stat-bmr">1 800 kcal</span>
+          <span class="stat-label">Métabolisme de base</span>
+          <span class="stat-value" id="stat-bmr">1 800</span>
+          <span class="stat-unit">kcal</span>
         </div>
         <div class="stat-card">
-          <span class="stat-icon">🏃</span>
-          <span class="stat-label">Actives</span>
-          <span class="stat-value" id="stat-active">0 kcal</span>
+          <span class="stat-label">Calories actives</span>
+          <span class="stat-value" id="stat-active">0</span>
+          <span class="stat-unit">kcal</span>
         </div>
         <div class="stat-card stat-accent">
-          <span class="stat-icon">⚖️</span>
-          <span class="stat-label">Solde</span>
-          <span class="stat-value" id="stat-balance">0 kcal</span>
+          <span class="stat-label">Solde calorique</span>
+          <span class="stat-value" id="stat-balance">0</span>
+          <span class="stat-unit">kcal</span>
         </div>
       </div>
 
       <!-- ACTIONS -->
       <div class="actions-row">
         <button class="btn btn-primary" onclick="openMealModal()">＋ Ajouter un repas</button>
-        <button class="btn btn-secondary" onclick="openActivityModal()">🏋️ Activité</button>
+        <button class="btn btn-secondary" onclick="openActivityModal()">Activité physique</button>
       </div>
 
       <!-- REPAS DU JOUR -->

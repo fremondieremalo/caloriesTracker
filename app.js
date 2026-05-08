@@ -1,15 +1,13 @@
 /* ============================================================
-   CALTRACK — app.js
-   Sync Firestore + localStorage (fallback offline)
+   CALORIES TRACKER — app.js
    ============================================================ */
 
 const BMR = 1800;
-const FS_COLLECTION = 'days'; // Collection Firestore
+const FS_COLLECTION = 'days';
 
 /* ---- État global ---- */
-let db = null;          // instance Firestore
-let cache = {};         // cache local { 'YYYY-MM-DD': { meals, activeCalories } }
-let unsubscribe = null; // listener temps réel
+let db      = null;
+let cache   = {};
 let isOnline = false;
 
 /* ============================================================
@@ -29,12 +27,6 @@ function formatLong(dateStr) {
   return `${days[dt.getDay()]} ${d} ${months[m-1]} ${y}`;
 }
 
-function formatShort(dateStr) {
-  const [,m,d] = dateStr.split('-').map(Number);
-  const months = ['jan','fév','mar','avr','mai','juin','juil','aoû','sep','oct','nov','déc'];
-  return `${d} ${months[m-1]}`;
-}
-
 function weekdayLetter(dateStr) {
   const [y,m,d] = dateStr.split('-').map(Number);
   return ['D','L','M','M','J','V','S'][new Date(y, m-1, d).getDay()];
@@ -43,36 +35,69 @@ function weekdayLetter(dateStr) {
 function last30Days() {
   const days = [];
   for (let i = 29; i >= 0; i--) {
-    const dt = new Date(); dt.setDate(dt.getDate() - i);
+    const dt = new Date();
+    dt.setDate(dt.getDate() - i);
     days.push(`${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`);
   }
   return days;
 }
 
 /* ============================================================
-   MEAL HELPERS
-   ============================================================ */
-const MEAL_EMOJI = {
-  'Petit déjeuner': '🌅',
-  'Déjeuner':       '☀️',
-  'Goûter':         '🍎',
-  'Dîner':          '🌙',
-  'Grignotage':     '🍿',
-};
-function mealEmoji(type) { return MEAL_EMOJI[type] || '🍽️'; }
-
-/* ============================================================
-   CALCULS
+   CALCULS & STATUT
    ============================================================ */
 function consumed(day)  { return (day?.meals || []).reduce((s,m) => s + (m.calories||0), 0); }
 function spent(day)     { return BMR + (day?.activeCalories || 0); }
-function status(day) {
-  const c = consumed(day), s2 = spent(day);
-  if (c === 0 && !day?.meals?.length && !day?.activeCalories) return 'none';
-  const diff = c - s2;
+
+/* Retourne une classe CSS selon le solde */
+function statusClass(day) {
+  if (!day || (!day.meals?.length && !day.activeCalories)) return 's-none';
+  const diff = consumed(day) - spent(day);
+  if (diff < -500) return 's-g1';      // déficit > 500 kcal → vert très foncé
+  if (diff < -300) return 's-g2';      // déficit 300-500   → vert foncé
+  if (diff < -50)  return 's-g3';      // déficit 50-300    → vert moyen
+  if (diff <=  50) return 's-o1';      // équilibre ±50     → orange
+  if (diff <=  200) return 's-r3';     // surplus 50-200    → rouge clair
+  if (diff <=  500) return 's-r2';     // surplus 200-500   → rouge moyen
+  return 's-r1';                       // surplus > 500     → rouge foncé
+}
+
+/* Badge du jour courant */
+function badgeClass(day) {
+  if (!day || (!day.meals?.length && !day.activeCalories)) return '';
+  const diff = consumed(day) - spent(day);
   if (diff < -50)  return 'green';
   if (diff <= 100) return 'orange';
   return 'red';
+}
+function badgeLabel(day) {
+  if (!day || (!day.meals?.length && !day.activeCalories)) return '—';
+  const diff = consumed(day) - spent(day);
+  if (diff < -50)  return '✓ Déficit';
+  if (diff <= 100) return '≈ Équilibré';
+  return '↑ Surplus';
+}
+
+const MEAL_EMOJI = { 'Petit déjeuner':'🌅','Déjeuner':'☀️','Goûter':'🍎','Dîner':'🌙','Grignotage':'🍿' };
+function mealEmoji(type) { return MEAL_EMOJI[type] || '🍽️'; }
+
+/* ============================================================
+   THÈME JOUR / NUIT
+   ============================================================ */
+function initTheme() {
+  const saved = localStorage.getItem('caltrack_theme') || 'light';
+  applyTheme(saved);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const icon = document.getElementById('theme-icon');
+  if (icon) icon.textContent = theme === 'dark' ? '🌙' : '☀️';
+  localStorage.setItem('caltrack_theme', theme);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  applyTheme(current === 'dark' ? 'light' : 'dark');
 }
 
 /* ============================================================
@@ -81,19 +106,18 @@ function status(day) {
 function setSyncStatus(state, label) {
   const dot = document.getElementById('sync-dot');
   const lbl = document.getElementById('sync-label');
-  dot.className = 'sync-dot ' + state;
-  lbl.textContent = label;
+  if (dot) dot.className = 'sync-dot ' + state;
+  if (lbl) lbl.textContent = label;
 }
 
 /* ============================================================
-   FIREBASE INIT + SYNC TEMPS RÉEL
+   FIREBASE
    ============================================================ */
 function initFirebase() {
   try {
     db = firebase.firestore();
     setSyncStatus('syncing', 'Connexion à Firebase…');
 
-    // Écoute temps réel sur les 30 derniers jours
     const days30 = last30Days();
     db.collection(FS_COLLECTION)
       .where(firebase.firestore.FieldPath.documentId(), 'in', days30)
@@ -101,7 +125,6 @@ function initFirebase() {
         (snapshot) => {
           isOnline = true;
           snapshot.forEach(doc => { cache[doc.id] = doc.data(); });
-          // Mémoriser aussi localement
           localStorage.setItem('caltrack_cache', JSON.stringify(cache));
           setSyncStatus('connected', `Synchronisé · ${new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'})}`);
           render();
@@ -110,42 +133,38 @@ function initFirebase() {
           console.error('Firestore error:', err);
           isOnline = false;
           setSyncStatus('error', 'Hors ligne — données locales');
-          loadFromLocalStorage();
+          loadFromLocal();
           render();
         }
       );
   } catch (e) {
     console.error('Firebase init error:', e);
     setSyncStatus('error', 'Firebase non configuré — mode local');
-    loadFromLocalStorage();
+    loadFromLocal();
     render();
   }
 }
 
-function loadFromLocalStorage() {
-  try {
-    cache = JSON.parse(localStorage.getItem('caltrack_cache') || '{}');
-  } catch { cache = {}; }
+function loadFromLocal() {
+  try { cache = JSON.parse(localStorage.getItem('caltrack_cache') || '{}'); }
+  catch { cache = {}; }
 }
 
-/* ---- Écriture Firestore ---- */
 async function saveDay(dateStr, dayData) {
-  // Toujours sauvegarder en local d'abord
   cache[dateStr] = dayData;
   localStorage.setItem('caltrack_cache', JSON.stringify(cache));
 
   if (!db || !isOnline) {
-    setSyncStatus('error', 'Mode local — sera sync au retour en ligne');
+    setSyncStatus('error', 'Mode local — sync au retour en ligne');
     return;
   }
-
   setSyncStatus('syncing', 'Sauvegarde…');
   try {
     await db.collection(FS_COLLECTION).doc(dateStr).set(dayData);
     setSyncStatus('connected', `Synchronisé · ${new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'})}`);
   } catch (e) {
     console.error('Save error:', e);
-    setSyncStatus('error', 'Erreur sync — données sauvées localement');
+    setSyncStatus('error', 'Erreur sync — données locales');
   }
 }
 
@@ -155,47 +174,37 @@ function getDayData(dateStr) {
 }
 
 /* ============================================================
-   RENDER
+   RENDER PRINCIPAL
    ============================================================ */
-   
 function render() {
   const today = todayStr();
-  const dayData = getDayData(today);
-
-  // Header
   document.getElementById('current-date-header').textContent = formatLong(today);
   document.getElementById('today-date-label').textContent    = formatLong(today);
-
   renderStrip(today);
-  renderToday(dayData, today);
+  renderToday(getDayData(today), today);
 }
 
-/* ---- Bande historique ---- */
+/* ---- Bande historique : couleur de fond, juste jour+numéro, pas de bicep ---- */
 function renderStrip(today) {
   const strip = document.getElementById('history-strip');
   strip.innerHTML = '';
 
   last30Days().forEach(dateStr => {
     const day = cache[dateStr];
-    const st  = status(day);
-    const c   = day ? consumed(day) : 0;
+    const sc  = statusClass(day);
     const isT = dateStr === today;
-
     const [,,d] = dateStr.split('-');
 
     const el = document.createElement('div');
-    el.className = `hday s-${st}${isT ? ' is-today' : ''}`;
+    el.className = `hday ${sc}${isT ? ' is-today' : ''}`;
     el.innerHTML = `
       <span class="hday-label">${isT ? 'auj.' : weekdayLetter(dateStr)}</span>
       <span class="hday-num">${+d}</span>
-      <span class="hday-bicep">💪</span>
-      <span class="hday-kcal">${c > 0 ? c.toLocaleString('fr-FR')+'k' : '—'}</span>
     `;
     el.onclick = () => openHistoryDetail(dateStr);
     strip.appendChild(el);
   });
 
-  // Auto-scroll vers aujourd'hui
   setTimeout(() => {
     const todayEl = strip.querySelector('.is-today');
     if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
@@ -207,12 +216,11 @@ function renderToday(day, dateStr) {
   const c  = consumed(day);
   const s2 = spent(day);
   const b  = c - s2;
-  const st = status(day);
 
   // Badge
   const badge = document.getElementById('badge-status');
-  badge.className = `badge-status ${st === 'none' ? '' : st}`;
-  badge.textContent = st === 'green' ? '✓ Déficit' : st === 'orange' ? '≈ Équilibré' : st === 'red' ? '↑ Surplus' : '—';
+  badge.className = `badge-status ${badgeClass(day)}`;
+  badge.textContent = badgeLabel(day);
 
   // Batterie
   const pct  = s2 > 0 ? Math.min(Math.round((c / s2) * 100), 150) : 0;
@@ -223,14 +231,14 @@ function renderToday(day, dateStr) {
   document.getElementById('battery-consumed').textContent = `${c.toLocaleString('fr-FR')} kcal ingurgitées`;
   document.getElementById('battery-spent').textContent    = `/ ${s2.toLocaleString('fr-FR')} kcal dépensées`;
 
-  // Stats
-  document.getElementById('stat-bmr').textContent    = `${BMR.toLocaleString('fr-FR')} kcal`;
-  document.getElementById('stat-active').textContent = `${(day.activeCalories||0).toLocaleString('fr-FR')} kcal`;
-  const balEl = document.getElementById('stat-balance');
-  balEl.textContent = `${b > 0 ? '+' : ''}${b.toLocaleString('fr-FR')} kcal`;
-  balEl.style.color = b < -50 ? 'var(--green)' : b > 100 ? 'var(--red)' : 'var(--orange)';
+  // KPI — valeur chiffrée uniquement (sans "kcal" dans le span value)
+  document.getElementById('stat-bmr').textContent    = BMR.toLocaleString('fr-FR');
+  document.getElementById('stat-active').textContent = (day.activeCalories||0).toLocaleString('fr-FR');
 
-  // Repas
+  const balEl = document.getElementById('stat-balance');
+  balEl.textContent  = `${b > 0 ? '+' : ''}${b.toLocaleString('fr-FR')}`;
+  balEl.style.color  = b < -50 ? 'var(--g1)' : b > 100 ? 'var(--r2)' : 'var(--o1)';
+
   renderMeals(day.meals || [], dateStr, 'today-meals-list', 'empty-meals');
 }
 
@@ -241,7 +249,7 @@ function renderMeals(meals, dateStr, listId, emptyId) {
 
   if (!meals.length) {
     list.innerHTML = '';
-    if (emptyEl) { emptyEl.style.display='block'; list.appendChild(emptyEl); }
+    if (emptyEl) { emptyEl.style.display = 'block'; list.appendChild(emptyEl); }
     return;
   }
   if (emptyEl) emptyEl.style.display = 'none';
@@ -291,11 +299,11 @@ async function saveMeal() {
   const compo    = document.getElementById('meal-composition').value.trim();
   const dateStr  = document.getElementById('meal-date').value || todayStr();
 
-  if (!type)              { showToast('⚠️ Choisis un type de repas'); return; }
+  if (!type)             { showToast('⚠️ Choisis un type de repas'); return; }
   if (!calories || calories <= 0) { showToast('⚠️ Calories invalides'); return; }
 
   const day = getDayData(dateStr);
-  day.meals = [...(day.meals || []), { type, calories, composition: compo, time: new Date().toISOString() }];
+  day.meals = [...(day.meals||[]), { type, calories, composition: compo, time: new Date().toISOString() }];
   await saveDay(dateStr, day);
 
   closeMealModal();
@@ -355,14 +363,24 @@ function openHistoryDetail(dateStr) {
   const c   = consumed(day);
   const s2  = spent(day);
   const b   = c - s2;
-  const st  = status(day);
+  const sc  = statusClass(day);
   const isT = dateStr === todayStr();
 
-  const colors = { green:'var(--green)', orange:'var(--orange)', red:'var(--red)', none:'var(--text-muted)' };
-  const labels = { green:'💪 Déficit calorique', orange:'🔶 Équilibré', red:'🔴 Surplus calorique', none:'— Aucune donnée' };
+  const colorMap = {
+    's-g1':'var(--g1)','s-g2':'var(--g2)','s-g3':'var(--g3)',
+    's-o1':'var(--o1)',
+    's-r3':'var(--r3)','s-r2':'var(--r2)','s-r1':'var(--r1)',
+    's-none':'var(--text-muted)'
+  };
+  const labelMap = {
+    's-g1':'Déficit > 500 kcal 💪','s-g2':'Déficit 300-500 kcal','s-g3':'Déficit 50-300 kcal',
+    's-o1':'Équilibré',
+    's-r3':'Surplus léger','s-r2':'Surplus modéré','s-r1':'Surplus important',
+    's-none':'Aucune donnée'
+  };
 
   const titleEl = document.getElementById('history-detail-title');
-  titleEl.textContent  = isT ? 'Aujourd\'hui' : formatLong(dateStr);
+  titleEl.textContent  = isT ? "Aujourd'hui" : formatLong(dateStr);
   titleEl.dataset.date = dateStr;
 
   const meals = day.meals || [];
@@ -385,15 +403,15 @@ function openHistoryDetail(dateStr) {
 
   document.getElementById('history-detail-content').innerHTML = `
     <div class="history-meta">
-      <span>🔥 ${BMR.toLocaleString('fr-FR')} kcal base</span>
+      <span>🔥 ${BMR.toLocaleString('fr-FR')} kcal métabolisme</span>
       <span>🏃 ${(day.activeCalories||0).toLocaleString('fr-FR')} kcal actives</span>
       <span>🍽️ ${c.toLocaleString('fr-FR')} kcal ingurgitées</span>
-      <span style="color:${colors[st]}">⚖️ ${b > 0?'+':''}${b.toLocaleString('fr-FR')} kcal · ${labels[st]}</span>
+      <span style="color:${colorMap[sc]}">⚖️ ${b > 0?'+':''}${b.toLocaleString('fr-FR')} kcal · ${labelMap[sc]}</span>
     </div>
     <div class="meals-list">${mealsHTML}</div>
     <div class="actions-row" style="margin-top:16px;">
       <button class="btn btn-secondary btn-sm" onclick="openMealModal('${dateStr}')">＋ Ajouter un repas</button>
-      <button class="btn btn-secondary btn-sm" onclick="openActivityModal('${dateStr}')">🏋️ Modifier l'activité</button>
+      <button class="btn btn-secondary btn-sm" onclick="openActivityModal('${dateStr}')">Modifier l'activité</button>
     </div>
   `;
 
@@ -425,7 +443,7 @@ function showToast(msg) {
 }
 
 /* ============================================================
-   KEYBOARD SHORTCUTS
+   KEYBOARD
    ============================================================ */
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
@@ -442,15 +460,18 @@ document.addEventListener('keydown', e => {
    INIT
    ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
-  // Pré-remplir dates
+  // Thème sauvegardé
+  initTheme();
+
+  // Dates par défaut
   document.getElementById('meal-date').value     = todayStr();
   document.getElementById('activity-date').value = todayStr();
 
-  // Charger le cache local immédiatement pour affichage rapide
-  loadFromLocalStorage();
+  // Cache local → affichage immédiat
+  loadFromLocal();
   render();
 
-  // Puis connecter Firebase
+  // Connexion Firebase
   initFirebase();
 
   // Refresh auto à minuit
