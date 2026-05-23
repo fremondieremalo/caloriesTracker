@@ -8,7 +8,9 @@ const FS_COLLECTION = 'days';
 /* ---- État global ---- */
 let db      = null;
 let cache   = {};
+let cacheAll = {};
 let isOnline = false;
+const KCAL_PER_KG = 7700;
 
 /* ============================================================
    UTILS DATE
@@ -128,6 +130,7 @@ function initFirebase() {
           localStorage.setItem('caltrack_cache', JSON.stringify(cache));
           setSyncStatus('connected', `Synchronisé · ${new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'})}`);
           render();
+          loadAllTime(); // charge tous les jours pour le déficit total
         },
         (err) => {
           console.error('Firestore error:', err);
@@ -146,13 +149,59 @@ function initFirebase() {
 }
 
 function loadFromLocal() {
-  try { cache = JSON.parse(localStorage.getItem('caltrack_cache') || '{}'); }
-  catch { cache = {}; }
+  try { cache    = JSON.parse(localStorage.getItem('caltrack_cache')    || '{}'); }
+  catch { cache  = {}; }
+  try { cacheAll = JSON.parse(localStorage.getItem('caltrack_cache_all') || '{}'); }
+  catch { cacheAll = {}; }
+}
+
+/* Chargement one-shot de TOUS les jours Firestore pour le déficit total */
+async function loadAllTime() {
+  if (!db || !isOnline) return;
+  try {
+    const snapshot = await db.collection(FS_COLLECTION).get();
+    cacheAll = {};
+    snapshot.forEach(doc => { cacheAll[doc.id] = doc.data(); });
+    localStorage.setItem('caltrack_cache_all', JSON.stringify(cacheAll));
+    renderAllTimeStats();
+  } catch (e) {
+    console.error('loadAllTime error:', e);
+  }
+}
+
+/* Calcule et affiche le déficit total + kg depuis le début */
+function renderAllTimeStats() {
+  const allData = Object.keys(cacheAll).length ? cacheAll : cache;
+  let totalDeficit = 0;
+  let hasDays = false;
+
+  Object.entries(allData).forEach(([, day]) => {
+    if (day && (day.meals?.length || day.activeCalories)) {
+      hasDays = true;
+      totalDeficit += spent(day) - consumed(day); // positif = déficit
+    }
+  });
+
+  const kcalEl = document.getElementById('alltime-kcal');
+  const kgEl   = document.getElementById('alltime-kg');
+  if (!kcalEl || !kgEl) return;
+
+  if (!hasDays) {
+    kcalEl.textContent = '—'; kgEl.textContent = '—'; return;
+  }
+
+  const isPositive = totalDeficit >= 0;
+  kcalEl.textContent = `${isPositive ? '-' : '+'}${Math.abs(Math.round(totalDeficit)).toLocaleString('fr-FR')} kcal`;
+  kcalEl.className   = 'alltime-kcal' + (isPositive ? '' : ' surplus');
+  kgEl.textContent   = `${isPositive ? '-' : '+'}${Math.abs(totalDeficit / KCAL_PER_KG).toFixed(2)} kg`;
+  kgEl.className     = 'alltime-kg' + (isPositive ? '' : ' surplus');
 }
 
 async function saveDay(dateStr, dayData) {
-  cache[dateStr] = dayData;
+  cache[dateStr]    = dayData;
+  cacheAll[dateStr] = dayData; // aussi dans le cache total
   localStorage.setItem('caltrack_cache', JSON.stringify(cache));
+  localStorage.setItem('caltrack_cache_all', JSON.stringify(cacheAll));
 
   if (!db || !isOnline) {
     setSyncStatus('error', 'Mode local — sync au retour en ligne');
@@ -182,6 +231,7 @@ function render() {
   document.getElementById('today-date-label').textContent    = formatLong(today);
   renderStrip(today);
   renderToday(getDayData(today), today);
+  renderAllTimeStats();
 }
 
 /* ---- Bande historique : couleur de fond, juste jour+numéro, pas de bicep ---- */
