@@ -34,7 +34,11 @@
     <!-- HISTORIQUE BANDE -->
     <section>
       <div class="history-header">
-        <div class="section-label">Historique · 30 derniers jours</div>
+        <div class="month-nav">
+          <button class="month-nav-btn" id="month-prev" onclick="prevMonth()" title="Mois précédent">‹</button>
+          <span class="month-nav-label" id="month-label">—</span>
+          <button class="month-nav-btn" id="month-next" onclick="nextMonth()" title="Mois suivant">›</button>
+        </div>
         <div class="alltime-badges">
           <div class="alltime-badge">
             <span class="alltime-label">Déficit total</span>
@@ -120,14 +124,14 @@
 
   <!-- MODAL REPAS -->
   <div class="modal-overlay" id="meal-modal" onclick="closeMealModal(event)">
-    <div class="modal">
+    <div class="modal modal-compact">
       <div class="modal-header">
-        <h2 class="modal-title">Nouveau repas</h2>
+        <h2 class="modal-title" id="meal-modal-title">Nouveau repas</h2>
         <button class="btn-close" onclick="closeMealModal()">✕</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label">Type de repas <span class="req">*</span></label>
+          <label class="form-label">Repas</label>
           <select class="form-select" id="meal-type">
             <option value="">— Choisir —</option>
             <option value="Petit déjeuner">🌅 Petit déjeuner</option>
@@ -138,20 +142,13 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Calories <span class="req">*</span></label>
+          <label class="form-label">Calories</label>
           <div class="input-wrap">
-            <input type="number" class="form-input" id="meal-calories" placeholder="ex : 650" min="0" />
+            <input type="number" class="form-input form-input-lg" id="meal-calories" placeholder="650" min="0" inputmode="numeric" />
             <span class="input-unit">kcal</span>
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Composition <span class="opt">(optionnel)</span></label>
-          <textarea class="form-textarea" id="meal-composition" placeholder="ex : Riz, poulet, légumes…"></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Date <span class="opt">(modifier si besoin)</span></label>
-          <input type="date" class="form-input" id="meal-date" />
-        </div>
+        <input type="hidden" id="meal-date" />
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeMealModal()">Annuler</button>

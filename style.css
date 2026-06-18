@@ -203,6 +203,33 @@ body {
 }
 .history-header .section-label { margin-bottom: 0; }
 
+.month-nav {
+  display: flex; align-items: center; gap: 12px;
+}
+
+.month-nav-btn {
+  width: 30px; height: 30px; border-radius: 8px;
+  border: 1.5px solid var(--border2);
+  background: var(--card);
+  color: var(--text);
+  font-size: 17px; font-weight: 700; line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.month-nav-btn:hover:not(:disabled) {
+  border-color: var(--accent); color: var(--accent-dark);
+  transform: translateY(-1px); box-shadow: 0 2px 8px var(--shadow);
+}
+.month-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.month-nav-label {
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text); font-family: var(--font-mono);
+  min-width: 130px; text-align: center;
+}
+
 .alltime-badges {
   display: flex; gap: 10px; flex-wrap: wrap;
 }
@@ -550,6 +577,9 @@ body {
 }
 .modal-overlay.open .modal { transform: translateY(0) scale(1); }
 
+.modal-compact { max-width: 380px; }
+.modal-compact .form-select { font-size: 16px; padding: 13px 14px; }
+
 .modal-header { padding: 24px 24px 0; display: flex; align-items: center; justify-content: space-between; }
 .modal-title  { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; }
 .modal-body   { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
@@ -580,6 +610,11 @@ body {
 .form-input:focus, .form-select:focus, .form-textarea:focus {
   border-color: var(--accent); box-shadow: 0 0 0 3px rgba(39,168,79,0.14);
 }
+.form-input-lg {
+  font-size: 22px; font-weight: 700;
+  padding: 14px 16px; letter-spacing: -0.5px;
+}
+.form-input-lg + .input-unit { font-size: 13px; right: 16px; }
 .form-select {
   cursor: pointer;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%235a7a5a' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
@@ -641,6 +676,7 @@ body {
   .btn { justify-content: center; }
   .meal-compo { display: none; }
   .modal { border-radius: 20px 20px 0 0; }
+  .modal-compact { max-width: 100%; }
   .modal-overlay { align-items: flex-end; padding: 0; }
   .history-detail-card { padding: 20px; border-radius: 16px; }
 }

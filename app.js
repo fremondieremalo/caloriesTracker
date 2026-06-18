@@ -44,6 +44,45 @@ function last30Days() {
   return days;
 }
 
+/* ---- Navigation mensuelle pour l'historique complet ---- */
+const now0 = new Date();
+let viewYear  = now0.getFullYear();
+let viewMonth = now0.getMonth(); // 0-11
+
+const MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+function daysInMonth(year, month) { return new Date(year, month + 1, 0).getDate(); }
+
+function isCurrentMonth(year, month) {
+  const n = new Date();
+  return year === n.getFullYear() && month === n.getMonth();
+}
+
+function datesOfViewedMonth() {
+  const total = daysInMonth(viewYear, viewMonth);
+  const today = todayStr();
+  const dates = [];
+  for (let d = 1; d <= total; d++) {
+    const s = `${viewYear}-${pad(viewMonth+1)}-${pad(d)}`;
+    if (s > today) break; // ne pas afficher les jours futurs
+    dates.push(s);
+  }
+  return dates;
+}
+
+function prevMonth() {
+  viewMonth--;
+  if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+  renderMonthStrip();
+}
+
+function nextMonth() {
+  if (isCurrentMonth(viewYear, viewMonth)) return; // déjà au mois courant
+  viewMonth++;
+  if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  renderMonthStrip();
+}
+
 /* ============================================================
    CALCULS & STATUT
    ============================================================ */
@@ -164,6 +203,7 @@ async function loadAllTime() {
     snapshot.forEach(doc => { cacheAll[doc.id] = doc.data(); });
     localStorage.setItem('caltrack_cache_all', JSON.stringify(cacheAll));
     renderAllTimeStats();
+    renderMonthStrip();
   } catch (e) {
     console.error('loadAllTime error:', e);
   }
@@ -218,8 +258,15 @@ async function saveDay(dateStr, dayData) {
 }
 
 function getDayData(dateStr) {
-  if (!cache[dateStr]) cache[dateStr] = { meals: [], activeCalories: 0 };
+  if (cache[dateStr]) return cache[dateStr];
+  if (cacheAll[dateStr]) { cache[dateStr] = cacheAll[dateStr]; return cache[dateStr]; }
+  cache[dateStr] = { meals: [], activeCalories: 0 };
   return cache[dateStr];
+}
+
+/* Lecture seule, sans créer d'entrée vide (pour l'affichage de la bande) */
+function peekDay(dateStr) {
+  return cacheAll[dateStr] || cache[dateStr] || null;
 }
 
 /* ============================================================
@@ -229,18 +276,32 @@ function render() {
   const today = todayStr();
   document.getElementById('current-date-header').textContent = formatLong(today);
   document.getElementById('today-date-label').textContent    = formatLong(today);
-  renderStrip(today);
+  renderMonthStrip();
   renderToday(getDayData(today), today);
   renderAllTimeStats();
 }
 
-/* ---- Bande historique : couleur de fond, juste jour+numéro, pas de bicep ---- */
-function renderStrip(today) {
+/* ---- Bande historique : navigation mois par mois, cases colorées sans détails ---- */
+function renderMonthStrip() {
   const strip = document.getElementById('history-strip');
-  strip.innerHTML = '';
+  const label = document.getElementById('month-label');
+  const today = todayStr();
 
-  last30Days().forEach(dateStr => {
-    const day = cache[dateStr];
+  if (label) label.textContent = `${MONTH_NAMES[viewMonth]} ${viewYear}`;
+
+  const nextBtn = document.getElementById('month-next');
+  if (nextBtn) nextBtn.disabled = isCurrentMonth(viewYear, viewMonth);
+
+  strip.innerHTML = '';
+  const dates = datesOfViewedMonth();
+
+  if (!dates.length) {
+    strip.innerHTML = '<p class="loading-text">Aucun jour à afficher.</p>';
+    return;
+  }
+
+  dates.forEach(dateStr => {
+    const day = peekDay(dateStr);
     const sc  = statusClass(day);
     const isT = dateStr === today;
     const [,,d] = dateStr.split('-');
@@ -258,6 +319,7 @@ function renderStrip(today) {
   setTimeout(() => {
     const todayEl = strip.querySelector('.is-today');
     if (todayEl) todayEl.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+    else strip.scrollTo({ left: strip.scrollWidth, behavior: 'smooth' });
   }, 80);
 }
 
@@ -330,12 +392,15 @@ function renderMeals(meals, dateStr, listId, emptyId) {
    ============================================================ */
 function openMealModal(prefill) {
   const dateStr = prefill || todayStr();
-  document.getElementById('meal-type').value        = '';
-  document.getElementById('meal-calories').value    = '';
-  document.getElementById('meal-composition').value = '';
-  document.getElementById('meal-date').value        = dateStr;
+  const isToday = dateStr === todayStr();
+  document.getElementById('meal-type').value     = '';
+  document.getElementById('meal-calories').value = '';
+  document.getElementById('meal-date').value      = dateStr;
+  document.getElementById('meal-modal-title').textContent = isToday
+    ? 'Nouveau repas'
+    : `Nouveau repas · ${formatLong(dateStr)}`;
   document.getElementById('meal-modal').classList.add('open');
-  setTimeout(() => document.getElementById('meal-calories').focus(), 320);
+  setTimeout(() => document.getElementById('meal-type').focus(), 320);
 }
 
 function closeMealModal(e) {
@@ -346,14 +411,13 @@ function closeMealModal(e) {
 async function saveMeal() {
   const type     = document.getElementById('meal-type').value.trim();
   const calories = parseInt(document.getElementById('meal-calories').value);
-  const compo    = document.getElementById('meal-composition').value.trim();
   const dateStr  = document.getElementById('meal-date').value || todayStr();
 
-  if (!type)             { showToast('⚠️ Choisis un type de repas'); return; }
+  if (!type)             { showToast('⚠️ Choisis un repas'); return; }
   if (!calories || calories <= 0) { showToast('⚠️ Calories invalides'); return; }
 
   const day = getDayData(dateStr);
-  day.meals = [...(day.meals||[]), { type, calories, composition: compo, time: new Date().toISOString() }];
+  day.meals = [...(day.meals||[]), { type, calories, time: new Date().toISOString() }];
   await saveDay(dateStr, day);
 
   closeMealModal();
